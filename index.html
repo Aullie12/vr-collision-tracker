@@ -101,6 +101,14 @@
           return;
         }
 
+        // Store original materials of all objects to prevent them from getting reflections
+        this.originalMaterials = new Map();
+        scene.traverse((obj) => {
+          if (obj.material && obj !== mirrorMesh) {
+            this.originalMaterials.set(obj, obj.material.clone());
+          }
+        });
+
         // Create cube render target for reflection
         const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512, {
           format: THREE.RGBFormat,
@@ -114,16 +122,21 @@
         this.cubeCamera.position.set(mirrorPos.x, mirrorPos.y, mirrorPos.z);
         scene.add(this.cubeCamera);
 
-        // Apply reflection to mirror material
-        mirrorMesh.material = new THREE.MeshStandardMaterial({
+        // Create a NEW material specifically for the mirror (don't modify existing)
+        const mirrorMaterial = new THREE.MeshStandardMaterial({
           envMap: cubeRenderTarget.texture,
           metalness: 1,
           roughness: 0,
           color: 0xffffff,
-          side: THREE.DoubleSide
+          side: THREE.DoubleSide,
+          envMapIntensity: 1
         });
 
+        // Apply ONLY to mirror
+        mirrorMesh.material = mirrorMaterial;
         this.mirrorMesh = mirrorMesh;
+        this.cubeRenderTarget = cubeRenderTarget;
+        
         console.log('Mirror reflection initialized');
       },
 
@@ -132,7 +145,7 @@
           // Hide mirror during reflection capture to avoid recursion
           this.mirrorMesh.visible = false;
           
-          // Update cube camera
+          // Update cube camera to capture the scene
           this.cubeCamera.update(this.el.sceneEl.renderer, this.el.sceneEl.object3D);
           
           // Show mirror again
