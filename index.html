@@ -10,7 +10,7 @@
 <body>
   <a-scene>
     <!-- Camera rig for player movement -->
-    <a-entity id="rig" movement-controls="controls: gamepad; speed: 0.15">
+   <a-entity id="rig" joystick-movement="speed: 0.15">
       <a-entity camera position="0 1.6 0" look-controls="pointerLockEnabled: false">
         <!-- Cube camera for mirror reflections -->
         <a-entity id="cube-camera" position="0 0 0"></a-entity>
@@ -80,7 +80,7 @@
     let isColliding = false;
 
     // Joystick movement component
-    AFRAME.registerComponent('movement-controls', {
+    AFRAME.registerComponent('joystick-movement', {
       schema: {
         speed: { default: 0.15 },
         controls: { default: 'gamepad' }
