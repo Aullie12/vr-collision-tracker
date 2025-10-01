@@ -39,7 +39,8 @@
       position="0 1.219 -1.73" 
       width="3.048" 
       height="1.829" 
-      material="shader: standard; metalness: 1; roughness: 0; color: #FFFFFF; emissive: #888888; emissiveIntensity: 0.3; side: double">
+      material="shader: standard; metalness: 1; roughness: 0; color: #FFFFFF; side: double"
+      mirror-reflection>
     </a-plane>
     
     <!-- Front Wall -->
@@ -88,6 +89,57 @@
     let totalCollisions = 0;
     let isColliding = false;
     let lastCollisionTime = 0;
+
+    // Mirror reflection component
+    AFRAME.registerComponent('mirror-reflection', {
+      init: function() {
+        const scene = this.el.sceneEl.object3D;
+        const mirrorMesh = this.el.getObject3D('mesh');
+        
+        if (!mirrorMesh) {
+          console.error('Mirror mesh not found');
+          return;
+        }
+
+        // Create cube render target for reflection
+        const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512, {
+          format: THREE.RGBFormat,
+          generateMipmaps: true,
+          minFilter: THREE.LinearMipmapLinearFilter
+        });
+
+        // Create cube camera at mirror position
+        const mirrorPos = this.el.getAttribute('position');
+        this.cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRenderTarget);
+        this.cubeCamera.position.set(mirrorPos.x, mirrorPos.y, mirrorPos.z);
+        scene.add(this.cubeCamera);
+
+        // Apply reflection to mirror material
+        mirrorMesh.material = new THREE.MeshStandardMaterial({
+          envMap: cubeRenderTarget.texture,
+          metalness: 1,
+          roughness: 0,
+          color: 0xffffff,
+          side: THREE.DoubleSide
+        });
+
+        this.mirrorMesh = mirrorMesh;
+        console.log('Mirror reflection initialized');
+      },
+
+      tick: function() {
+        if (this.cubeCamera && this.mirrorMesh) {
+          // Hide mirror during reflection capture to avoid recursion
+          this.mirrorMesh.visible = false;
+          
+          // Update cube camera
+          this.cubeCamera.update(this.el.sceneEl.renderer, this.el.sceneEl.object3D);
+          
+          // Show mirror again
+          this.mirrorMesh.visible = true;
+        }
+      }
+    });
 
     // Wait for scene to load
     document.addEventListener('DOMContentLoaded', function() {
