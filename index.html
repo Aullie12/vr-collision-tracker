@@ -90,36 +90,36 @@
     let isColliding = false;
     let lastCollisionTime = 0;
 
-    // Custom Mirror Reflection Component (without external library)
+    // Room View Monitor Component - Shows view from mirror position
     AFRAME.registerComponent('mirror-reflector', {
       init: function() {
         this.camera = null;
         this.renderTarget = null;
         this.mirrorMesh = null;
-        this.setupMirror();
+        this.setupMonitor();
       },
 
-      setupMirror: function() {
+      setupMonitor: function() {
         const el = this.el;
         const sceneEl = el.sceneEl;
         
         // Wait for scene to be ready
         if (!sceneEl.hasLoaded) {
-          sceneEl.addEventListener('loaded', () => this.setupMirror());
+          sceneEl.addEventListener('loaded', () => this.setupMonitor());
           return;
         }
 
         // Get the mesh
         const mesh = el.getObject3D('mesh');
         if (!mesh) {
-          setTimeout(() => this.setupMirror(), 100);
+          setTimeout(() => this.setupMonitor(), 100);
           return;
         }
 
-        // Create render target for reflection texture
+        // Create render target for the camera view texture
         this.renderTarget = new THREE.WebGLRenderTarget(
-          window.innerWidth * 0.5,
-          window.innerHeight * 0.5,
+          1024,
+          1024,
           {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter,
@@ -127,39 +127,39 @@
           }
         );
 
-        // Create a camera for the reflection
+        // Create a camera at the mirror's position looking into the room
         this.camera = new THREE.PerspectiveCamera(
-          50,
-          window.innerWidth / window.innerHeight,
+          75,
+          1, // Square aspect ratio
           0.1,
-          1000
+          100
         );
 
-        // Create mirror material
-        const mirrorMaterial = new THREE.MeshBasicMaterial({
+        // Position camera at mirror location
+        const mirrorPos = el.getAttribute('position');
+        const mirrorRot = el.getAttribute('rotation');
+        
+        // Place camera at mirror position
+        this.camera.position.set(mirrorPos.x, mirrorPos.y, mirrorPos.z);
+        
+        // Camera looks forward into the room (opposite direction of mirror normal)
+        // Mirror faces -Z (back wall), so camera should look +Z (into room)
+        this.camera.rotation.set(
+          THREE.MathUtils.degToRad(mirrorRot.x),
+          THREE.MathUtils.degToRad(mirrorRot.y + 180), // Look opposite direction
+          THREE.MathUtils.degToRad(mirrorRot.z)
+        );
+
+        // Create material showing camera view
+        const monitorMaterial = new THREE.MeshBasicMaterial({
           map: this.renderTarget.texture,
           side: THREE.DoubleSide
         });
 
-        mesh.material = mirrorMaterial;
+        mesh.material = monitorMaterial;
         this.mirrorMesh = mesh;
 
-        // Get mirror plane info
-        const mirrorWorldPosition = new THREE.Vector3();
-        const mirrorWorldNormal = new THREE.Vector3(0, 0, 1);
-        
-        el.object3D.getWorldPosition(mirrorWorldPosition);
-        
-        // Transform normal by mirror rotation
-        const normalMatrix = new THREE.Matrix3().getNormalMatrix(el.object3D.matrixWorld);
-        mirrorWorldNormal.applyMatrix3(normalMatrix).normalize();
-
-        this.mirrorWorldPosition = mirrorWorldPosition;
-        this.mirrorWorldNormal = mirrorWorldNormal;
-        this.mirrorPlane = new THREE.Plane();
-        this.mirrorPlane.setFromNormalAndCoplanarPoint(mirrorWorldNormal, mirrorWorldPosition);
-
-        console.log('✨ Custom mirror reflections initialized!');
+        console.log('✨ Room view monitor initialized at mirror position!');
       },
 
       tick: function() {
@@ -168,49 +168,20 @@
         const sceneEl = this.el.sceneEl;
         const renderer = sceneEl.renderer;
         const scene = sceneEl.object3D;
-        const mainCamera = sceneEl.camera;
 
-        if (!renderer || !mainCamera) return;
+        if (!renderer) return;
 
-        // Get main camera position
-        const cameraWorldPosition = new THREE.Vector3();
-        mainCamera.getWorldPosition(cameraWorldPosition);
-
-        // Calculate mirrored camera position (reflect camera across mirror plane)
-        const reflectionPosition = cameraWorldPosition.clone();
-        const distance = this.mirrorPlane.distanceToPoint(cameraWorldPosition);
-        
-        // Mirror the camera position across the plane
-        reflectionPosition.sub(this.mirrorWorldNormal.clone().multiplyScalar(2 * distance));
-
-        // Calculate what the camera should look at (mirror the look direction)
-        const mainCameraDirection = new THREE.Vector3(0, 0, -1);
-        mainCamera.getWorldDirection(mainCameraDirection);
-        
-        // Reflect the look direction across the mirror plane
-        const reflectedDirection = mainCameraDirection.clone();
-        const dot = reflectedDirection.dot(this.mirrorWorldNormal);
-        reflectedDirection.sub(this.mirrorWorldNormal.clone().multiplyScalar(2 * dot));
-        
-        // Position and orient the reflection camera
-        this.camera.position.copy(reflectionPosition);
-        const lookAtPoint = reflectionPosition.clone().add(reflectedDirection);
-        this.camera.lookAt(lookAtPoint);
-        
-        // Match the main camera's rotation for proper orientation
-        this.camera.up.copy(mainCamera.up);
-
-        // Hide mirror during rendering to avoid recursion
+        // Hide the monitor plane during rendering to avoid showing itself
         this.mirrorMesh.visible = false;
 
-        // Render reflection
+        // Render the room from the camera's perspective
         const currentRenderTarget = renderer.getRenderTarget();
         renderer.setRenderTarget(this.renderTarget);
         renderer.clear();
         renderer.render(scene, this.camera);
         renderer.setRenderTarget(currentRenderTarget);
 
-        // Show mirror again
+        // Show the monitor again
         this.mirrorMesh.visible = true;
       }
     });
