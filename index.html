@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>VR Room with Collision Tracking</title>
+  <meta name="description" content="VR Room with Table and Mirror">
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+</head>
+<body>
+  <a-scene>
+    <!-- Camera rig for player movement -->
+    <a-entity id="rig" movement-controls="controls: gamepad; speed: 0.15">
+      <a-entity camera position="0 1.6 0" look-controls="pointerLockEnabled: false">
+        <!-- Cube camera for mirror reflections -->
+        <a-entity id="cube-camera" position="0 0 0"></a-entity>
+      </a-entity>
+      
+      <!-- VR Controllers -->
+      <a-entity oculus-touch-controls="hand: left"></a-entity>
+      <a-entity oculus-touch-controls="hand: right"></a-entity>
+    </a-entity>
+
+    <!-- Room Walls (12ft x 12ft x 8ft) -->
+    <!-- 1 foot ≈ 0.3048 meters: 12ft = 3.658m, 8ft = 2.438m -->
+    
+    <!-- Floor -->
+    <a-plane position="0 0 0" rotation="-90 0 0" width="3.658" height="3.658" color="#666666" shadow></a-plane>
+    
+    <!-- Ceiling -->
+    <a-plane position="0 2.438 0" rotation="90 0 0" width="3.658" height="3.658" color="#666666"></a-plane>
+    
+    <!-- Back Wall (with mirror) -->
+    <a-box id="back-wall" position="0 1.219 -1.829" width="3.658" height="2.438" depth="0.1" color="#666666"></a-box>
+    
+    <!-- Mirror on back wall (10ft x 6ft = 3.048m x 1.829m) -->
+    <a-plane 
+      id="mirror"
+      position="0 1.219 -1.824" 
+      width="3.048" 
+      height="1.829" 
+      material="shader: flat; src: #mirror-texture; metalness: 1; roughness: 0"
+      class="mirror">
+    </a-plane>
+    
+    <!-- Front Wall -->
+    <a-box position="0 1.219 1.829" width="3.658" height="2.438" depth="0.1" color="#666666"></a-box>
+    
+    <!-- Left Wall -->
+    <a-box position="-1.829 1.219 0" width="0.1" height="2.438" depth="3.658" color="#666666"></a-box>
+    
+    <!-- Right Wall -->
+    <a-box position="1.829 1.219 0" width="0.1" height="2.438" depth="3.658" color="#666666"></a-box>
+
+    <!-- Table in center (3ft x 3ft x 3ft = 0.914m) -->
+    <a-box 
+      id="collision-table"
+      position="0 0.457 0" 
+      width="0.914" 
+      height="0.914" 
+      depth="0.914" 
+      color="#8B4513"
+      static-body>
+    </a-box>
+
+    <!-- Lighting -->
+    <a-light type="ambient" color="#BBB" intensity="0.8"></a-light>
+    <a-light type="directional" color="#FFF" intensity="0.6" position="2 4 1"></a-light>
+    <a-light type="point" color="#FFF" intensity="0.5" position="0 2 0"></a-light>
+  </a-scene>
+
+  <script>
+    // Configuration - UPDATE THIS WITH YOUR VERCEL FUNCTION URL
+   const VERCEL_API_URL = 'https://vr-collision-tracker-436c.vercel.app/api/log-collision';
+    
+    // Session management
+    let sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    let collisionCount = 0;
+    let totalCollisions = 0;
+    let isColliding = false;
+
+    // Joystick movement component
+    AFRAME.registerComponent('movement-controls', {
+      schema: {
+        speed: { default: 0.15 },
+        controls: { default: 'gamepad' }
+      },
+      
+      init: function() {
+        this.velocity = new THREE.Vector3();
+        this.gamepad = null;
+      },
+      
+      tick: function(time, delta) {
+        const gamepads = navigator.getGamepads();
+        
+        // Find Oculus controller (usually gamepad 0 or 1)
+        for (let i = 0; i < gamepads.length; i++) {
+          if (gamepads[i] && gamepads[i].id.toLowerCase().includes('oculus')) {
+            this.gamepad = gamepads[i];
+            break;
+          }
+        }
+        
+        if (!this.gamepad) return;
+        
+        // Right joystick axes (usually axes 2 and 3)
+        const axisX = this.gamepad.axes[2] || 0;
+        const axisY = this.gamepad.axes[3] || 0;
+        
+        // Dead zone to prevent drift
+        const deadzone = 0.15;
+        const moveX = Math.abs(axisX) > deadzone ? axisX : 0;
+        const moveY = Math.abs(axisY) > deadzone ? axisY : 0;
+        
+        if (moveX !== 0 || moveY !== 0) {
+          const camera = this.el.querySelector('[camera]');
+          const rotation = camera.getAttribute('rotation');
+          const direction = new THREE.Euler(0, THREE.MathUtils.degToRad(rotation.y), 0);
+          
+          // Calculate movement direction based on camera rotation
+          const forward = new THREE.Vector3(0, 0, -1);
+          const right = new THREE.Vector3(1, 0, 0);
+          
+          forward.applyEuler(direction);
+          right.applyEuler(direction);
+          
+          // Apply joystick input
+          this.velocity.copy(forward).multiplyScalar(-moveY * this.data.speed);
+          this.velocity.addScaledVector(right, moveX * this.data.speed);
+          
+          // Move the rig
+          const currentPos = this.el.getAttribute('position');
+          this.el.setAttribute('position', {
+            x: currentPos.x + this.velocity.x,
+            y: currentPos.y,
+            z: currentPos.z + this.velocity.z
+          });
+        }
+      }
+    });
+
+    // Collision detection component
+    AFRAME.registerComponent('collision-tracker', {
+      init: function() {
+        this.checkCollision = this.checkCollision.bind(this);
+      },
+      
+      tick: function() {
+        this.checkCollision();
+      },
+      
+      checkCollision: function() {
+        const rig = document.querySelector('#rig');
+        const table = document.querySelector('#collision-table');
+        
+        if (!rig || !table) return;
+        
+        const rigPos = rig.getAttribute('position');
+        const tablePos = table.getAttribute('position');
+        
+        // Simple AABB collision detection
+        const rigBox = {
+          minX: rigPos.x - 0.3,
+          maxX: rigPos.x + 0.3,
+          minY: rigPos.y,
+          maxY: rigPos.y + 1.8,
+          minZ: rigPos.z - 0.3,
+          maxZ: rigPos.z + 0.3
+        };
+        
+        const tableBox = {
+          minX: tablePos.x - 0.457,
+          maxX: tablePos.x + 0.457,
+          minY: tablePos.y - 0.457,
+          maxY: tablePos.y + 0.457,
+          minZ: tablePos.z - 0.457,
+          maxZ: tablePos.z + 0.457
+        };
+        
+        const collision = (
+          rigBox.maxX > tableBox.minX &&
+          rigBox.minX < tableBox.maxX &&
+          rigBox.maxY > tableBox.minY &&
+          rigBox.minY < tableBox.maxY &&
+          rigBox.maxZ > tableBox.minZ &&
+          rigBox.minZ < tableBox.maxZ
+        );
+        
+        // Log collision when it first happens (not continuously)
+        if (collision && !isColliding) {
+          isColliding = true;
+          this.logCollision();
+        } else if (!collision && isColliding) {
+          isColliding = false;
+        }
+      },
+      
+      logCollision: function() {
+        collisionCount++;
+        totalCollisions++;
+        
+        console.log(`Collision detected! Count: ${collisionCount}, Total: ${totalCollisions}`);
+        
+        // Send to backend
+        fetch(VERCEL_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: sessionId,
+            collisionCount: collisionCount,
+            totalCollisions: totalCollisions
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Collision logged to Google Sheets:', data);
+        })
+        .catch(error => {
+          console.error('Error logging collision:', error);
+        });
+      }
+    });
+
+    // Add collision tracker to scene
+    document.addEventListener('DOMContentLoaded', function() {
+      const scene = document.querySelector('a-scene');
+      scene.setAttribute('collision-tracker', '');
+    });
+
+    // Simple mirror reflection (cube camera simulation)
+    AFRAME.registerComponent('mirror', {
+      init: function() {
+        // Create reflective material
+        const texture = new THREE.CubeTextureLoader().load([
+          '', '', '', '', '', '' // Empty for now, would need actual cube texture
+        ]);
+        
+        this.el.setAttribute('material', {
+          shader: 'standard',
+          metalness: 0.9,
+          roughness: 0.1,
+          color: '#CCCCCC',
+          envMap: texture
+        });
+      }
+    });
+  </script>
+</body>
+</html>
