@@ -135,20 +135,12 @@
           100
         );
 
-        // Position camera at mirror location
-        const mirrorPos = el.getAttribute('position');
-        const mirrorRot = el.getAttribute('rotation');
+        // Position camera at mirror location (back wall facing forward)
+        // Mirror is at z=-1.73, we want camera to look toward z=positive (into the room)
+        this.camera.position.set(0, 1.219, -1.73);
         
-        // Place camera at mirror position
-        this.camera.position.set(mirrorPos.x, mirrorPos.y, mirrorPos.z);
-        
-        // Camera looks forward into the room (opposite direction of mirror normal)
-        // Mirror faces -Z (back wall), so camera should look +Z (into room)
-        this.camera.rotation.set(
-          THREE.MathUtils.degToRad(mirrorRot.x),
-          THREE.MathUtils.degToRad(mirrorRot.y + 180), // Look opposite direction
-          THREE.MathUtils.degToRad(mirrorRot.z)
-        );
+        // Look at the center of the room (where the table is)
+        this.camera.lookAt(0, 1.219, 0);
 
         // Create material showing camera view
         const monitorMaterial = new THREE.MeshBasicMaterial({
@@ -159,7 +151,7 @@
         mesh.material = monitorMaterial;
         this.mirrorMesh = mesh;
 
-        console.log('✨ Room view monitor initialized at mirror position!');
+        console.log('✨ Room view monitor initialized! Camera at mirror position looking at table.');
       },
 
       tick: function() {
