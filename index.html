@@ -6,6 +6,7 @@
   <meta name="description" content="VR Room with Table and Mirror">
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/objects/Reflector.js"></script>
 </head>
 <body>
   <a-scene>
@@ -37,10 +38,10 @@
     <a-plane 
       id="mirror"
       position="0 1.219 -1.73" 
+      rotation="0 0 0"
       width="3.048" 
       height="1.829" 
-      material="shader: standard; metalness: 1; roughness: 0; color: #FFFFFF; side: double"
-      mirror-reflection>
+      mirror-reflector>
     </a-plane>
     
     <!-- Front Wall -->
@@ -90,67 +91,67 @@
     let isColliding = false;
     let lastCollisionTime = 0;
 
-    // Mirror reflection component
-    AFRAME.registerComponent('mirror-reflection', {
+    // Mirror Reflector Component
+    AFRAME.registerComponent('mirror-reflector', {
       init: function() {
-        const scene = this.el.sceneEl.object3D;
-        const mirrorMesh = this.el.getObject3D('mesh');
+        const el = this.el;
         
-        if (!mirrorMesh) {
-          console.error('Mirror mesh not found');
+        // Wait for the element to load
+        if (el.hasLoaded) {
+          this.setupMirror();
+        } else {
+          el.addEventListener('loaded', () => {
+            this.setupMirror();
+          });
+        }
+      },
+
+      setupMirror: function() {
+        const el = this.el;
+        
+        // Check if THREE.Reflector is available
+        if (typeof THREE.Reflector === 'undefined') {
+          console.error('THREE.Reflector not loaded. Mirror will use fallback material.');
+          // Fallback to metallic material
+          el.setAttribute('material', {
+            shader: 'standard',
+            color: '#E8E8E8',
+            metalness: 0.95,
+            roughness: 0.05,
+            side: 'double'
+          });
           return;
         }
 
-        // Store original materials of all objects to prevent them from getting reflections
-        this.originalMaterials = new Map();
-        scene.traverse((obj) => {
-          if (obj.material && obj !== mirrorMesh) {
-            this.originalMaterials.set(obj, obj.material.clone());
-          }
-        });
-
-        // Create cube render target for reflection
-        const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512, {
-          format: THREE.RGBFormat,
-          generateMipmaps: true,
-          minFilter: THREE.LinearMipmapLinearFilter
-        });
-
-        // Create cube camera at mirror position
-        const mirrorPos = this.el.getAttribute('position');
-        this.cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRenderTarget);
-        this.cubeCamera.position.set(mirrorPos.x, mirrorPos.y, mirrorPos.z);
-        scene.add(this.cubeCamera);
-
-        // Create a NEW material specifically for the mirror (don't modify existing)
-        const mirrorMaterial = new THREE.MeshStandardMaterial({
-          envMap: cubeRenderTarget.texture,
-          metalness: 1,
-          roughness: 0,
-          color: 0xffffff,
-          side: THREE.DoubleSide,
-          envMapIntensity: 1
-        });
-
-        // Apply ONLY to mirror
-        mirrorMesh.material = mirrorMaterial;
-        this.mirrorMesh = mirrorMesh;
-        this.cubeRenderTarget = cubeRenderTarget;
-        
-        console.log('Mirror reflection initialized');
-      },
-
-      tick: function() {
-        if (this.cubeCamera && this.mirrorMesh) {
-          // Hide mirror during reflection capture to avoid recursion
-          this.mirrorMesh.visible = false;
-          
-          // Update cube camera to capture the scene
-          this.cubeCamera.update(this.el.sceneEl.renderer, this.el.sceneEl.object3D);
-          
-          // Show mirror again
-          this.mirrorMesh.visible = true;
+        // Get the plane's geometry
+        const mesh = el.getObject3D('mesh');
+        if (!mesh || !mesh.geometry) {
+          console.error('Mirror mesh or geometry not found');
+          return;
         }
+
+        const geometry = mesh.geometry;
+        
+        // Create the Reflector with the plane geometry
+        const reflector = new THREE.Reflector(geometry, {
+          clipBias: 0.003,
+          textureWidth: window.innerWidth * window.devicePixelRatio * 0.5,
+          textureHeight: window.innerHeight * window.devicePixelRatio * 0.5,
+          color: 0xcccccc
+        });
+
+        // Copy position and rotation from the A-Frame element
+        const position = el.object3D.position;
+        const rotation = el.object3D.rotation;
+        
+        reflector.position.copy(position);
+        reflector.rotation.copy(rotation);
+
+        // Remove the original mesh and add the reflector
+        el.removeObject3D('mesh');
+        el.setObject3D('mesh', reflector);
+
+        console.log('✨ Real mirror reflections initialized!');
       }
     });
 
