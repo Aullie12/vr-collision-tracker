@@ -176,14 +176,29 @@
         const cameraWorldPosition = new THREE.Vector3();
         mainCamera.getWorldPosition(cameraWorldPosition);
 
-        // Calculate reflection camera position
+        // Calculate mirrored camera position (reflect camera across mirror plane)
         const reflectionPosition = cameraWorldPosition.clone();
-        const distance = this.mirrorPlane.distanceToPoint(reflectionPosition);
-        reflectionPosition.addScaledVector(this.mirrorWorldNormal, -2 * distance);
+        const distance = this.mirrorPlane.distanceToPoint(cameraWorldPosition);
+        
+        // Mirror the camera position across the plane
+        reflectionPosition.sub(this.mirrorWorldNormal.clone().multiplyScalar(2 * distance));
 
-        // Set reflection camera position and look at mirror
+        // Calculate what the camera should look at (mirror the look direction)
+        const mainCameraDirection = new THREE.Vector3(0, 0, -1);
+        mainCamera.getWorldDirection(mainCameraDirection);
+        
+        // Reflect the look direction across the mirror plane
+        const reflectedDirection = mainCameraDirection.clone();
+        const dot = reflectedDirection.dot(this.mirrorWorldNormal);
+        reflectedDirection.sub(this.mirrorWorldNormal.clone().multiplyScalar(2 * dot));
+        
+        // Position and orient the reflection camera
         this.camera.position.copy(reflectionPosition);
-        this.camera.lookAt(this.mirrorWorldPosition);
+        const lookAtPoint = reflectionPosition.clone().add(reflectedDirection);
+        this.camera.lookAt(lookAtPoint);
+        
+        // Match the main camera's rotation for proper orientation
+        this.camera.up.copy(mainCamera.up);
 
         // Hide mirror during rendering to avoid recursion
         this.mirrorMesh.visible = false;
