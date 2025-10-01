@@ -36,8 +36,12 @@
       position="0 1.219 -1.824" 
       width="3.048" 
       height="1.829" 
-      material="shader: standard; metalness: 0.9; roughness: 0.1; color: #CCCCCC">
+      material="shader: standard; metalness: 1; roughness: 0; color: #E0E0E0; side: double"
+      reflection>
     </a-plane>
+    
+    <!-- Mirror frame for visibility -->
+    <a-box position="0 1.219 -1.820" width="3.148" height="1.929" depth="0.05" color="#2C2C2C" material="metalness: 0.8; roughness: 0.3"></a-box>
     
     <!-- Front Wall -->
     <a-box position="0 1.219 1.829" width="3.658" height="2.438" depth="0.1" color="#666666"></a-box>
@@ -49,14 +53,25 @@
     <a-box position="1.829 1.219 0" width="0.1" height="2.438" depth="3.658" color="#666666"></a-box>
 
     <!-- Table in center (3ft x 3ft x 3ft = 0.914m) -->
+    <!-- Table top -->
     <a-box 
       id="collision-table"
-      position="0 0.457 0" 
+      position="0 0.864 0" 
       width="0.914" 
-      height="0.914" 
+      height="0.05" 
       depth="0.914" 
       color="#8B4513">
     </a-box>
+    
+    <!-- Table legs (each leg is 5cm x 5cm x 0.864m tall) -->
+    <!-- Front-left leg -->
+    <a-box position="-0.382 0.432 0.382" width="0.05" height="0.864" depth="0.05" color="#654321"></a-box>
+    <!-- Front-right leg -->
+    <a-box position="0.382 0.432 0.382" width="0.05" height="0.864" depth="0.05" color="#654321"></a-box>
+    <!-- Back-left leg -->
+    <a-box position="-0.382 0.432 -0.382" width="0.05" height="0.864" depth="0.05" color="#654321"></a-box>
+    <!-- Back-right leg -->
+    <a-box position="0.382 0.432 -0.382" width="0.05" height="0.864" depth="0.05" color="#654321"></a-box>
 
     <!-- Lighting -->
     <a-light type="ambient" color="#BBB" intensity="0.8"></a-light>
@@ -114,20 +129,20 @@
       const playerRadius = 0.4; // 40cm radius around player
       const playerHeight = 1.8; // 1.8m tall
       
-      // Table dimensions
-      const tableHalfSize = 0.457; // Half of 0.914m
+      // Table dimensions - now checking for table top
+      const tableHalfWidth = 0.457; // Half of 0.914m
+      const tableTop = 0.864; // Height of table top
       
       // Check if player is within table bounds
       const dx = Math.abs(rigPos.x - tablePos.x);
-      const dy = Math.abs(rigPos.y - tablePos.y);
       const dz = Math.abs(rigPos.z - tablePos.z);
       
-      // Simple collision detection
+      // Simple collision detection - check if player hits table or legs
       const collision = (
-        dx < (playerRadius + tableHalfSize) &&
-        dz < (playerRadius + tableHalfSize) &&
-        rigPos.y < (tablePos.y + tableHalfSize) &&
-        rigPos.y + playerHeight > (tablePos.y - tableHalfSize)
+        dx < (playerRadius + tableHalfWidth) &&
+        dz < (playerRadius + tableHalfWidth) &&
+        rigPos.y < (tableTop + 0.1) &&
+        rigPos.y + playerHeight > 0
       );
       
       // Debounce - only log if at least 1 second has passed since last collision
