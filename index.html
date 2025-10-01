@@ -10,11 +10,8 @@
 <body>
   <a-scene>
     <!-- Camera rig for player movement -->
-   <a-entity id="rig" joystick-movement="speed: 0.15">
-      <a-entity camera position="0 1.6 0" look-controls="pointerLockEnabled: false">
-        <!-- Cube camera for mirror reflections -->
-        <a-entity id="cube-camera" position="0 0 0"></a-entity>
-      </a-entity>
+    <a-entity id="rig" movement-controls="fly: false; speed: 0.15">
+      <a-entity id="camera" camera position="0 1.6 0" look-controls="pointerLockEnabled: false"></a-entity>
       
       <!-- VR Controllers -->
       <a-entity oculus-touch-controls="hand: left"></a-entity>
@@ -39,8 +36,7 @@
       position="0 1.219 -1.824" 
       width="3.048" 
       height="1.829" 
-      material="shader: flat; src: #mirror-texture; metalness: 1; roughness: 0"
-      class="mirror">
+      material="shader: standard; metalness: 0.9; roughness: 0.1; color: #CCCCCC">
     </a-plane>
     
     <!-- Front Wall -->
@@ -59,8 +55,7 @@
       width="0.914" 
       height="0.914" 
       depth="0.914" 
-      color="#8B4513"
-      static-body>
+      color="#8B4513">
     </a-box>
 
     <!-- Lighting -->
@@ -71,182 +66,117 @@
 
   <script>
     // Configuration - UPDATE THIS WITH YOUR VERCEL FUNCTION URL
-   const VERCEL_API_URL = 'https://vr-collision-tracker-436c.vercel.app/api/log-collision';
+    const VERCEL_API_URL = 'https://vr-collision-tracker-436c.vercel.app/api/log-collision';
     
     // Session management
     let sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     let collisionCount = 0;
     let totalCollisions = 0;
     let isColliding = false;
+    let lastCollisionTime = 0;
 
-    // Joystick movement component
-    AFRAME.registerComponent('joystick-movement', {
-      schema: {
-        speed: { default: 0.15 },
-        controls: { default: 'gamepad' }
-      },
-      
-      init: function() {
-        this.velocity = new THREE.Vector3();
-        this.gamepad = null;
-      },
-      
-      tick: function(time, delta) {
-        const gamepads = navigator.getGamepads();
-        
-        // Find Oculus controller (usually gamepad 0 or 1)
-        for (let i = 0; i < gamepads.length; i++) {
-          if (gamepads[i] && gamepads[i].id.toLowerCase().includes('oculus')) {
-            this.gamepad = gamepads[i];
-            break;
-          }
-        }
-        
-        if (!this.gamepad) return;
-        
-        // Right joystick axes (usually axes 2 and 3)
-        const axisX = this.gamepad.axes[2] || 0;
-        const axisY = this.gamepad.axes[3] || 0;
-        
-        // Dead zone to prevent drift
-        const deadzone = 0.15;
-        const moveX = Math.abs(axisX) > deadzone ? axisX : 0;
-        const moveY = Math.abs(axisY) > deadzone ? axisY : 0;
-        
-        if (moveX !== 0 || moveY !== 0) {
-          const camera = this.el.querySelector('[camera]');
-          const rotation = camera.getAttribute('rotation');
-          const direction = new THREE.Euler(0, THREE.MathUtils.degToRad(rotation.y), 0);
-          
-          // Calculate movement direction based on camera rotation
-          const forward = new THREE.Vector3(0, 0, -1);
-          const right = new THREE.Vector3(1, 0, 0);
-          
-          forward.applyEuler(direction);
-          right.applyEuler(direction);
-          
-          // Apply joystick input
-          this.velocity.copy(forward).multiplyScalar(-moveY * this.data.speed);
-          this.velocity.addScaledVector(right, moveX * this.data.speed);
-          
-          // Move the rig
-          const currentPos = this.el.getAttribute('position');
-          this.el.setAttribute('position', {
-            x: currentPos.x + this.velocity.x,
-            y: currentPos.y,
-            z: currentPos.z + this.velocity.z
-          });
-        }
-      }
-    });
-
-    // Collision detection component
-    AFRAME.registerComponent('collision-tracker', {
-      init: function() {
-        this.checkCollision = this.checkCollision.bind(this);
-      },
-      
-      tick: function() {
-        this.checkCollision();
-      },
-      
-      checkCollision: function() {
-        const rig = document.querySelector('#rig');
-        const table = document.querySelector('#collision-table');
-        
-        if (!rig || !table) return;
-        
-        const rigPos = rig.getAttribute('position');
-        const tablePos = table.getAttribute('position');
-        
-        // Simple AABB collision detection
-        const rigBox = {
-          minX: rigPos.x - 0.3,
-          maxX: rigPos.x + 0.3,
-          minY: rigPos.y,
-          maxY: rigPos.y + 1.8,
-          minZ: rigPos.z - 0.3,
-          maxZ: rigPos.z + 0.3
-        };
-        
-        const tableBox = {
-          minX: tablePos.x - 0.457,
-          maxX: tablePos.x + 0.457,
-          minY: tablePos.y - 0.457,
-          maxY: tablePos.y + 0.457,
-          minZ: tablePos.z - 0.457,
-          maxZ: tablePos.z + 0.457
-        };
-        
-        const collision = (
-          rigBox.maxX > tableBox.minX &&
-          rigBox.minX < tableBox.maxX &&
-          rigBox.maxY > tableBox.minY &&
-          rigBox.minY < tableBox.maxY &&
-          rigBox.maxZ > tableBox.minZ &&
-          rigBox.minZ < tableBox.maxZ
-        );
-        
-        // Log collision when it first happens (not continuously)
-        if (collision && !isColliding) {
-          isColliding = true;
-          this.logCollision();
-        } else if (!collision && isColliding) {
-          isColliding = false;
-        }
-      },
-      
-      logCollision: function() {
-        collisionCount++;
-        totalCollisions++;
-        
-        console.log(`Collision detected! Count: ${collisionCount}, Total: ${totalCollisions}`);
-        
-        // Send to backend
-        fetch(VERCEL_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sessionId: sessionId,
-            collisionCount: collisionCount,
-            totalCollisions: totalCollisions
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          console.log('Collision logged to Google Sheets:', data);
-        })
-        .catch(error => {
-          console.error('Error logging collision:', error);
-        });
-      }
-    });
-
-    // Add collision tracker to scene
+    // Wait for scene to load
     document.addEventListener('DOMContentLoaded', function() {
       const scene = document.querySelector('a-scene');
-      scene.setAttribute('collision-tracker', '');
+      
+      scene.addEventListener('loaded', function() {
+        console.log('VR Scene loaded successfully');
+        console.log('Session ID:', sessionId);
+        console.log('Vercel API URL:', VERCEL_API_URL);
+        
+        // Start collision detection
+        startCollisionDetection();
+      });
     });
 
-    // Simple mirror reflection (cube camera simulation)
-    AFRAME.registerComponent('mirror', {
-      init: function() {
-        // Create reflective material
-        const texture = new THREE.CubeTextureLoader().load([
-          '', '', '', '', '', '' // Empty for now, would need actual cube texture
-        ]);
-        
-        this.el.setAttribute('material', {
-          shader: 'standard',
-          metalness: 0.9,
-          roughness: 0.1,
-          color: '#CCCCCC',
-          envMap: texture
-        });
+    function startCollisionDetection() {
+      const rig = document.querySelector('#rig');
+      const table = document.querySelector('#collision-table');
+      
+      if (!rig || !table) {
+        console.error('Rig or table not found!');
+        return;
       }
-    });
+      
+      console.log('Collision detection started');
+      
+      // Check for collisions every frame
+      setInterval(function() {
+        checkCollision(rig, table);
+      }, 100); // Check every 100ms
+    }
+
+    function checkCollision(rig, table) {
+      const rigPos = rig.getAttribute('position');
+      const tablePos = table.getAttribute('position');
+      
+      // Player collision box (cylindrical approximation)
+      const playerRadius = 0.4; // 40cm radius around player
+      const playerHeight = 1.8; // 1.8m tall
+      
+      // Table dimensions
+      const tableHalfSize = 0.457; // Half of 0.914m
+      
+      // Check if player is within table bounds
+      const dx = Math.abs(rigPos.x - tablePos.x);
+      const dy = Math.abs(rigPos.y - tablePos.y);
+      const dz = Math.abs(rigPos.z - tablePos.z);
+      
+      // Simple collision detection
+      const collision = (
+        dx < (playerRadius + tableHalfSize) &&
+        dz < (playerRadius + tableHalfSize) &&
+        rigPos.y < (tablePos.y + tableHalfSize) &&
+        rigPos.y + playerHeight > (tablePos.y - tableHalfSize)
+      );
+      
+      // Debounce - only log if at least 1 second has passed since last collision
+      const currentTime = Date.now();
+      
+      if (collision && !isColliding && (currentTime - lastCollisionTime > 1000)) {
+        isColliding = true;
+        lastCollisionTime = currentTime;
+        logCollision();
+      } else if (!collision) {
+        isColliding = false;
+      }
+    }
+
+    function logCollision() {
+      collisionCount++;
+      totalCollisions++;
+      
+      console.log('🎯 COLLISION DETECTED!');
+      console.log('Collision Count:', collisionCount);
+      console.log('Total Collisions:', totalCollisions);
+      
+      const data = {
+        sessionId: sessionId,
+        collisionCount: collisionCount,
+        totalCollisions: totalCollisions
+      };
+      
+      console.log('Sending to backend:', data);
+      
+      // Send to backend
+      fetch(VERCEL_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      })
+      .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+      })
+      .then(data => {
+        console.log('✅ Collision logged to Google Sheets:', data);
+      })
+      .catch(error => {
+        console.error('❌ Error logging collision:', error);
+      });
+    }
   </script>
 </body>
 </html>
