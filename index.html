@@ -30,13 +30,13 @@
     <!-- Back Wall (with mirror) -->
     <a-box id="back-wall" position="0 1.219 -1.829" width="3.658" height="2.438" depth="0.1" color="#666666"></a-box>
     
-    <!-- Mirror frame (outer border) -->
-    <a-box position="0 1.219 -1.825" width="3.2" height="2.0" depth="0.08" color="#1a1a1a" material="metalness: 0.9; roughness: 0.2"></a-box>
+    <!-- Mirror frame (outer border) - in front of wall -->
+    <a-box position="0 1.219 -1.774" width="3.2" height="2.0" depth="0.08" color="#1a1a1a" material="metalness: 0.9; roughness: 0.2"></a-box>
     
-    <!-- Mirror surface (10ft x 6ft = 3.048m x 1.829m) -->
+    <!-- Mirror surface (10ft x 6ft = 3.048m x 1.829m) - in front of frame -->
     <a-plane 
       id="mirror"
-      position="0 1.219 -1.82" 
+      position="0 1.219 -1.73" 
       width="3.048" 
       height="1.829" 
       material="shader: standard; metalness: 1; roughness: 0; color: #FFFFFF; emissive: #888888; emissiveIntensity: 0.3; side: double">
