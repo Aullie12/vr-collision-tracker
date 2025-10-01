@@ -135,9 +135,10 @@
           100
         );
 
-        // Position camera at mirror location (back wall facing forward)
-        // Mirror is at z=-1.73, we want camera to look toward z=positive (into the room)
-        this.camera.position.set(0, 1.219, -1.73);
+        // Position camera INSIDE the room, in front of the back wall
+        // Back wall is at z=-1.829, mirror frame at z=-1.774
+        // Put camera just inside the room at z=-1.7 (in front of mirror)
+        this.camera.position.set(0, 1.219, -1.7);
         
         // Look at the center of the room (where the table is)
         this.camera.lookAt(0, 1.219, 0);
